@@ -33,14 +33,13 @@ export const MultiplayerProvider = ({ children }) => {
   // Peer connections (host only)
   const connectionsRef = useRef({});
 
-  // Generate room code
-  const uid = new ShortUniqueId({ length: 6 });
-
   // Create room (become host)
   const createRoom = (playerName) => {
     return new Promise((resolve, reject) => {
       try {
-        const code = uid().toUpperCase();
+        // Generate room code
+        const uid = new ShortUniqueId({ length: 6 });
+        const code = uid.rnd().toUpperCase();
         const newPeer = new Peer(code);
 
         newPeer.on("open", (id) => {
