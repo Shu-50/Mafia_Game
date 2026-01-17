@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const OnlineRoleReveal = ({ role, playerName, onContinue }) => {
+const OnlineRoleReveal = ({ role, playerName, onReady }) => {
   const [countdown, setCountdown] = useState(5);
   const [acknowledged, setAcknowledged] = useState(false);
 
@@ -8,12 +8,13 @@ const OnlineRoleReveal = ({ role, playerName, onContinue }) => {
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
-    } else if (acknowledged) {
-      // Auto-continue after countdown if acknowledged
-      const timer = setTimeout(() => onContinue(), 3000);
-      return () => clearTimeout(timer);
     }
-  }, [countdown, acknowledged, onContinue]);
+  }, [countdown]);
+
+  const handleReady = () => {
+    setAcknowledged(true);
+    onReady(); // Signal to host that this player is ready
+  };
 
   const getRoleInfo = (role) => {
     switch (role) {
@@ -93,7 +94,7 @@ const OnlineRoleReveal = ({ role, playerName, onContinue }) => {
           <div>
             {!acknowledged ? (
               <button
-                onClick={() => setAcknowledged(true)}
+                onClick={handleReady}
                 className="btn btn-primary"
                 style={{ fontSize: "1.25rem", padding: "1rem 2rem" }}
               >
@@ -105,7 +106,7 @@ const OnlineRoleReveal = ({ role, playerName, onContinue }) => {
                   ✓ Waiting for other players...
                 </p>
                 <p className="text-secondary" style={{ fontSize: "0.875rem" }}>
-                  Starting in 3 seconds
+                  Game will start when everyone is ready
                 </p>
               </div>
             )}

@@ -21,6 +21,8 @@ export const MultiplayerProvider = ({ children }) => {
   const [myPlayerName, setMyPlayerName] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [gameStateUpdate, setGameStateUpdate] = useState(null);
 
   // Game settings (host only)
   const [gameSettings, setGameSettings] = useState({
@@ -32,6 +34,9 @@ export const MultiplayerProvider = ({ children }) => {
 
   // Peer connections (host only)
   const connectionsRef = useRef({});
+
+  // Track host status with ref to avoid closure issues
+  const isHostRef = useRef(false);
 
   // Create room (become host)
   const createRoom = (playerName) => {
@@ -47,10 +52,11 @@ export const MultiplayerProvider = ({ children }) => {
           setMyPlayerId(id);
           setMyPlayerName(playerName);
           setIsHost(true);
+          isHostRef.current = true; // Update ref
           setIsConnected(true);
 
-          // Add host as first player
-          setPlayers([{ id, name: playerName, isReady: false, isHost: true }]);
+          // Add host as first player (automatically ready)
+          setPlayers([{ id, name: playerName, isReady: true, isHost: true }]);
 
           setPeer(newPeer);
           resolve(code);
@@ -87,7 +93,11 @@ export const MultiplayerProvider = ({ children }) => {
           // Connect to host
           const conn = newPeer.connect(code);
 
+          // Store connection for sending messages to host
+          connectionsRef.current[code] = conn;
+
           conn.on("open", () => {
+            console.log("Connection to host opened");
             setRoomCode(code);
             setIsConnected(true);
             setPeer(newPeer);
@@ -103,6 +113,7 @@ export const MultiplayerProvider = ({ children }) => {
           });
 
           conn.on("data", (data) => {
+            console.log("Received data from host:", data);
             handleMessage(data, conn);
           });
 
@@ -110,6 +121,11 @@ export const MultiplayerProvider = ({ children }) => {
             console.error("Connection error:", err);
             setError("Failed to connect to room");
             reject(err);
+          });
+
+          conn.on("close", () => {
+            console.log("Connection to host closed");
+            setError("Connection to host lost");
           });
         });
 
@@ -128,15 +144,20 @@ export const MultiplayerProvider = ({ children }) => {
 
   // Handle incoming connections (host only)
   const handleIncomingConnection = (conn) => {
+    console.log("Incoming connection from:", conn.peer);
+
     conn.on("data", (data) => {
+      console.log("Host received data:", data);
       handleMessage(data, conn);
     });
 
     conn.on("open", () => {
+      console.log("Connection opened with:", conn.peer);
       connectionsRef.current[conn.peer] = conn;
     });
 
     conn.on("close", () => {
+      console.log("Connection closed with:", conn.peer);
       handlePlayerDisconnect(conn.peer);
     });
   };
@@ -145,38 +166,36 @@ export const MultiplayerProvider = ({ children }) => {
   const handleMessage = (data, conn) => {
     switch (data.type) {
       case "join":
-        if (isHost) {
-          // Add new player
-          setPlayers((prev) => [
-            ...prev,
-            {
-              id: data.playerId,
-              name: data.playerName,
-              isReady: false,
-              isHost: false,
-            },
-          ]);
+        if (isHostRef.current) {
+          console.log("Player joining:", data.playerName);
 
-          // Send current player list and settings to new player
-          conn.send({
-            type: "playerList",
-            players: players,
-            settings: gameSettings,
-          });
+          // Build the new player object
+          const newPlayer = {
+            id: data.playerId,
+            name: data.playerName,
+            isReady: false,
+            isHost: false,
+          };
 
-          // Broadcast updated player list to all
-          broadcastToAll({
-            type: "playerList",
-            players: [
-              ...players,
-              {
-                id: data.playerId,
-                name: data.playerName,
-                isReady: false,
-                isHost: false,
-              },
-            ],
-            settings: gameSettings,
+          // Add new player to state using functional update
+          setPlayers((prevPlayers) => {
+            const updatedPlayers = [...prevPlayers, newPlayer];
+
+            // Send current player list and settings to new player
+            conn.send({
+              type: "playerList",
+              players: updatedPlayers,
+              settings: gameSettings,
+            });
+
+            // Broadcast updated player list to all other players
+            broadcastToAll({
+              type: "playerList",
+              players: updatedPlayers,
+              settings: gameSettings,
+            });
+
+            return updatedPlayers;
           });
         }
         break;
@@ -187,13 +206,26 @@ export const MultiplayerProvider = ({ children }) => {
         break;
 
       case "ready":
-        setPlayers((prev) =>
-          prev.map((p) =>
-            p.id === data.playerId ? { ...p, isReady: data.isReady } : p,
-          ),
+        console.log(
+          "Received ready message:",
+          data,
+          "isHost:",
+          isHost,
+          "isHostRef:",
+          isHostRef.current,
         );
-        if (isHost) {
+        setPlayers((prev) => {
+          const updated = prev.map((p) =>
+            p.id === data.playerId ? { ...p, isReady: data.isReady } : p,
+          );
+          console.log("Updated players after ready:", updated);
+          return updated;
+        });
+        if (isHostRef.current) {
+          console.log("Broadcasting ready status to all players");
           broadcastToAll(data);
+        } else {
+          console.log("Not broadcasting (not host)");
         }
         break;
 
@@ -210,11 +242,13 @@ export const MultiplayerProvider = ({ children }) => {
         break;
 
       case "gameStart":
-        // Handle game start
+        console.log("Game starting!");
+        setGameStarted(true);
         break;
 
       case "gameState":
-        // Handle game state updates
+        console.log("Received game state update:", data.state);
+        setGameStateUpdate(data.state);
         break;
 
       default:
@@ -250,10 +284,13 @@ export const MultiplayerProvider = ({ children }) => {
     if (isHost) {
       broadcastToAll(message);
     } else {
-      // Send to host
-      const hostConn = Object.values(connectionsRef.current)[0];
+      // Send to host - get the connection by room code
+      const hostConn = connectionsRef.current[roomCode];
       if (hostConn?.open) {
+        console.log("Sending ready status to host:", message);
         hostConn.send(message);
+      } else {
+        console.error("No connection to host found");
       }
     }
   };
@@ -324,8 +361,9 @@ export const MultiplayerProvider = ({ children }) => {
 
   // Start game (host only)
   const startGame = () => {
-    if (!isHost) return;
+    if (!isHostRef.current) return;
 
+    setGameStarted(true);
     broadcastToAll({
       type: "gameStart",
     });
@@ -351,6 +389,8 @@ export const MultiplayerProvider = ({ children }) => {
     isConnected,
     error,
     gameSettings,
+    gameStarted,
+    gameStateUpdate,
     createRoom,
     joinRoom,
     leaveRoom,

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useMultiplayer } from "../../context/MultiplayerContext";
 
 const Lobby = ({ onStartGame }) => {
@@ -7,6 +8,7 @@ const Lobby = ({ onStartGame }) => {
     myPlayerId,
     isHost,
     gameSettings,
+    gameStarted,
     toggleReady,
     kickPlayer,
     updateSettings,
@@ -15,6 +17,14 @@ const Lobby = ({ onStartGame }) => {
 
   const myPlayer = players.find((p) => p.id === myPlayerId);
   const allReady = players.length >= 4 && players.every((p) => p.isReady);
+
+  // Watch for game start (for non-host players)
+  useEffect(() => {
+    if (gameStarted && !isHost) {
+      console.log("Non-host: Game started, transitioning...");
+      onStartGame();
+    }
+  }, [gameStarted, isHost, onStartGame]);
 
   const handleStartGame = () => {
     startGame();
