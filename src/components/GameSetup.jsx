@@ -7,10 +7,22 @@ const GameSetup = () => {
   const [playerNames, setPlayerNames] = useState(["", "", "", ""]);
 
   const handleNumPlayersChange = (e) => {
-    const num = parseInt(e.target.value);
-    if (num >= 4 && num <= 20) {
-      setNumPlayers(num);
-      const newNames = Array(num)
+    const value = e.target.value;
+
+    // Allow empty input while typing
+    if (value === "") {
+      setNumPlayers("");
+      return;
+    }
+
+    const num = parseInt(value);
+
+    // Only update if it's a valid number
+    if (!isNaN(num)) {
+      // Clamp between 4 and 20
+      const clampedNum = Math.max(4, Math.min(20, num));
+      setNumPlayers(clampedNum);
+      const newNames = Array(clampedNum)
         .fill("")
         .map((_, i) => playerNames[i] || "");
       setPlayerNames(newNames);
@@ -47,14 +59,47 @@ const GameSetup = () => {
           <label className="text-secondary mb-2" style={{ display: "block" }}>
             Number of Players (minimum 4)
           </label>
-          <input
-            type="number"
-            min="4"
-            max="20"
-            value={numPlayers}
-            onChange={handleNumPlayersChange}
-            className="input"
-          />
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <button
+              type="button"
+              onClick={() => {
+                const newNum = Math.max(4, numPlayers - 1);
+                setNumPlayers(newNum);
+                const newNames = Array(newNum)
+                  .fill("")
+                  .map((_, i) => playerNames[i] || "");
+                setPlayerNames(newNames);
+              }}
+              className="btn btn-secondary"
+              style={{ padding: "0.5rem 1rem", fontSize: "1.25rem" }}
+            >
+              ↓
+            </button>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={numPlayers}
+              onChange={handleNumPlayersChange}
+              className="input"
+              style={{ textAlign: "center", maxWidth: "100px" }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const newNum = Math.min(20, numPlayers + 1);
+                setNumPlayers(newNum);
+                const newNames = Array(newNum)
+                  .fill("")
+                  .map((_, i) => playerNames[i] || "");
+                setPlayerNames(newNames);
+              }}
+              className="btn btn-secondary"
+              style={{ padding: "0.5rem 1rem", fontSize: "1.25rem" }}
+            >
+              ↑
+            </button>
+          </div>
         </div>
 
         <div className="mb-4">
